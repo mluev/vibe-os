@@ -55,6 +55,10 @@ The seed skills cover six spheres. There are many more. See [PHILOSOPHY.md](PHIL
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md). The short version: pick a sphere, write a skill brief, use the kernel, follow the recommendation contract, support both scopes, provide offline-runnable fixtures.
 
+## Mac utilities
+
+- [docs/mac-caffeinate-closed-lid.md](docs/mac-caffeinate-closed-lid.md) — keep a MacBook awake with the lid closed (for long-running agents and builds)
+
 ## Further reading
 
 - [PHILOSOPHY.md](PHILOSOPHY.md) — core beliefs and directions of growth
