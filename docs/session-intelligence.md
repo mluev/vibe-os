@@ -1,14 +1,246 @@
-# Seed Skills
+# Session Intelligence
 
-These six skills ship with vibe-os. Together they cover every layer of the platform — the kernel, scope model, recommendation contract, redaction layer, artifact router, and multi-tool support — so contributors can see every part working end-to-end before writing their own skill.
+Session intelligence is the part of vibe-os that learns from recorded AI-assisted software work. It turns local transcripts into evidence-backed observations and proposed improvements while protecting sensitive context.
 
-Each entry here is a design brief: purpose, evidence consumed, output produced, scope behavior, tool support, and why this skill is a useful reference. Full `SKILL.md` files live in `skills/<name>/`.
+This document preserves the original technical design of vibe-os as a dedicated subsystem. The adapters, unified `Session` model, analysis scopes, redaction rules, recommendation contract, and reference skill briefs below apply to session-intelligence tools. They are not universal requirements for unrelated vibe-os tools.
+
+> **Status:** This is an implementation-ready design, not a claim that the kernel or reference skills have shipped.
+
+## Purpose and boundaries
+
+AI coding sessions contain behavioral evidence: prompts, tool use, retries, file references, failures, explanations, and successful workflows. Session-intelligence tools use that evidence to produce specific, reviewable insights or artifacts.
+
+The subsystem follows stricter rules than vibe-os as a whole:
+
+- Claims about user behavior cite the sessions that support them.
+- User-authored transcript text is redacted before any model call.
+- Tools consume normalized sessions rather than reading provider formats directly.
+- Analysis explicitly selects global or project scope.
+- Proposed mutations flow through an approval-aware artifact router.
+- Tools return no recommendation when the evidence is insufficient.
+
+## Data sources
+
+### Claude Code
+
+Claude Code stores project sessions at:
+
+```text
+~/.claude/projects/<encoded-path>/<session-uuid>.jsonl
+```
+
+The encoded path is the absolute project path with `/` replaced by `-`. Each line is an event. Reliable fields include `type`, `uuid`, `timestamp`, `sessionId`, and `message` on user and assistant events. Assistant messages contain text and tool-use blocks; tool results carry output and an error indicator.
+
+### Cursor
+
+Cursor stores project transcripts at:
+
+```text
+~/.cursor/projects/<encoded-path>/agent-transcripts/<session-uuid>.jsonl
+```
+
+Cursor's event schema differs from Claude Code's schema but maps to the same subsystem types through a source adapter.
+
+### Source cautions
+
+- Timestamps are reliable for ordering within a session; cross-session timezone handling needs care.
+- Token counts are not always available per event.
+- File content inside tool calls is evidence that a file was touched, not the canonical file source.
+- Several sessions may run concurrently for the same project.
+
+Additional AI tools can be supported through new adapters without changing analysis tools.
+
+## Scope model
+
+Every session query and proposed artifact has one of two analysis scopes:
+
+- **Global:** Load sessions across projects and supported sources to analyze personal habits and cross-project patterns.
+- **Project:** Load sessions for one project across supported sources to analyze codebase-specific behavior and knowledge.
+
+The kernel accepts:
+
+```text
+{ kind: "global" }
+{ kind: "project", path: "/absolute/project/path" }
+```
+
+The current working directory may supply the project path, but implementations must not hard-code encoded provider paths.
+
+## Subsystem architecture
+
+### Source adapters
+
+Each provider adapter implements:
+
+```text
+readSessions(scope: Scope) -> Session[]
+```
+
+An adapter discovers provider files, parses their format, and maps events into the shared types. It does not filter, redact, or analyze content.
+
+### Session loader
+
+The loader invokes the applicable adapters and returns merged, deduplicated sessions:
+
+```text
+Session {
+  id: string
+  source: "claude-code" | "cursor" | string
+  projectPath: string
+  projectKey: string
+  startedAt: Date
+  endedAt: Date
+  model: string | null
+  events: Event[]
+  turnCount: number
+  isAbandoned: boolean
+}
+```
+
+The loader does not parse canonical project files, claim exact token counts, or redact content.
+
+### Filter library
+
+Common filters prevent each analysis tool from reimplementing selection logic:
+
+| Filter | Meaning |
+|---|---|
+| `byDateRange(start, end)` | Sessions overlapping a time range |
+| `byProject(path)` | Sessions for one project across sources |
+| `bySource(tool)` | Sessions from a provider or host |
+| `byModel(modelId)` | Sessions using a model |
+| `byToolUsed(toolName)` | Sessions containing a named tool call |
+| `byOutcome(outcome)` | Sessions classified as `success`, `abandoned`, or `error` |
+| `containingText(text, role)` | Sessions where a role's message contains text |
+
+### Redaction layer
+
+Before user-authored transcript text is sent to a language model, redact:
+
+- JWTs and bearer tokens;
+- API keys and credential-like long strings near known key names;
+- `.env`-style key-value content;
+- usernames inside absolute file paths;
+- optionally configured IP addresses and internal domains.
+
+Redaction returns a copy, never mutates the source, and marks removed spans so a tool can report the number of redactions without exposing their contents. Deterministic tools that make no model calls do not need to redact data merely to process it locally.
+
+### Recommendation contract
+
+Session-intelligence tools use a common output so evidence can flow into artifact-producing tools:
+
+```json
+{
+  "title": "string",
+  "summary": "string",
+  "evidence": [
+    {
+      "sessionId": "string",
+      "source": "string",
+      "projectKey": "string",
+      "timestamp": "ISO-8601 string",
+      "excerpt": "post-redaction text"
+    }
+  ],
+  "scope": {
+    "kind": "global | project",
+    "path": "string | null"
+  },
+  "proposedArtifact": {
+    "type": "rule | skill | slash-command | agent | doc | note | stat | none",
+    "destination": "string",
+    "content": "string"
+  },
+  "confidence": "high | medium | low",
+  "rationale": "string"
+}
+```
+
+Rules:
+
+- `evidence` contains at least one session citation.
+- Every excerpt is post-redaction.
+- High confidence normally requires a pattern across at least five sessions or a strong recent burst.
+- Low confidence represents limited evidence or a plausible alternative explanation, not a placeholder.
+- Return an empty list when no supported pattern exists.
+
+### Artifact router
+
+The router turns an approved recommendation into the appropriate destination while checking for conflicts and duplication.
+
+| Type | Global destination | Project destination |
+|---|---|---|
+| `rule` | `~/.claude/CLAUDE.md` or global host equivalent | `<root>/CLAUDE.md` or project host equivalent |
+| `skill` | `~/.claude/skills/<name>/SKILL.md` or host equivalent | Tool-specific if supported |
+| `slash-command` | `~/.claude/commands/<name>.md` or host equivalent | `<root>/.claude/commands/<name>.md` or host equivalent |
+| `agent` | `~/.claude/agents/<name>.md` or host equivalent | `<root>/.claude/agents/<name>.md` or host equivalent |
+| `doc` | Not applicable | `<root>/docs/<name>.md` |
+| `note` | Global instruction or note destination | Project instruction or note destination |
+| `stat` / `none` | Presented without an artifact write | Presented without an artifact write |
+
+Before writing, the router checks for conflicting or duplicate content, shows the exact proposed diff, and obtains user approval. It appends or creates the approved artifact without replacing unrelated content.
+
+### Skill registry
+
+A subsystem registry may track which session-intelligence skills are installed, which recommendation types they produce, and which evidence types they consume. Its purpose is composition—for example, allowing a rule-creation skill to consume any recommendation whose artifact type is `rule`. It is not a universal vibe-os registry.
+
+## Privacy and cost
+
+- Process sessions locally by default.
+- Disclose external model calls and send only the context needed for the analysis.
+- Redact user-authored transcript text before local or remote model calls.
+- Prefer deterministic local analysis where it can produce the required quality.
+- When an additional paid model is necessary, disclose that cost before running it.
+
+## Data flow
+
+```mermaid
+flowchart TB
+    Sources["Provider session files"]
+    Adapters["Source adapters"]
+    Loader["Unified Session loader"]
+    Filters["Filter library"]
+    Redact["Redaction before model use"]
+    Analysis["Session-intelligence tool"]
+    Recommendation["Evidence-backed recommendation"]
+    Router["Artifact router"]
+    Approval["User review and approval"]
+    Artifact["Rule, skill, command, doc, note, or stat"]
+
+    Sources --> Adapters --> Loader --> Filters --> Analysis
+    Filters --> Redact --> Analysis
+    Analysis --> Recommendation --> Router --> Approval --> Artifact
+```
+
+The direct path from filters to analysis supports deterministic local tools. The redaction path is mandatory when transcript text is passed to a model.
+
+## Contributing to this subsystem
+
+Session-intelligence tools add requirements to the general contribution guide because they share sensitive sources and typed outputs.
+
+A session-intelligence skill documents:
+
+- its global, project, or dual-scope behavior;
+- supported transcript sources and any source-specific limitation;
+- an evidence specification precise enough to implement;
+- its recommendation and proposed artifact types;
+- the kernel layers and filters it consumes;
+- whether and where it calls a language model;
+- external calls, transmitted data, and cost.
+
+Provide synthetic JSONL fixtures for each supported transcript source. Fixtures contain no real user data, exercise the positive detection case, and ideally cover a negative case. Adapter contributions also include representative raw-format fixtures and must preserve the `readSessions(scope) -> Session[]` boundary.
+
+Verification checks that recommendations cite post-redaction evidence, respect the selected scope, conform to the recommendation contract, and return an empty list when the pattern is absent. Tools must not bypass adapters to read provider directories directly or send unredacted user-authored transcript text to a model.
+
+## Proposed reference skills
+
+The following six skills are preserved as design briefs for this subsystem. Together they exercise deterministic analysis, optional and required model use, cross-source comparison, recommendation composition, and multiple artifact types. Implementations should live under the repository structure chosen when the first tool is built.
 
 ---
 
 ## `vibe-stats`
 
-**Sphere:** Insightful stats
+**Capability area:** Behavioral statistics
 
 **Purpose:** Show behavioral statistics that are more useful than what your AI tool's built-in dashboard already provides. Not cost summaries or model tallies — stats that reveal patterns worth acting on.
 
@@ -55,7 +287,7 @@ This skill produces `stat` type recommendations — observations without a propo
 
 ## `vibe-token-optimizer`
 
-**Sphere:** Token optimization
+**Capability area:** Token optimization
 
 **Purpose:** Find sessions where tokens were wasted and recommend concrete, specific things to remove, restructure, or route to a smaller model.
 
@@ -104,7 +336,7 @@ Recommendations of type `rule` or `note`. Examples:
 
 ## `vibe-repetition-detector`
 
-**Sphere:** Pattern extraction
+**Capability area:** Pattern extraction
 
 **Purpose:** Surface recurring prompts, inline instructions, and request patterns that appear often enough to warrant a formal artifact. This skill is primarily a producer of evidence for other skills (`vibe-rule-creator`, slash command generator).
 
@@ -153,9 +385,9 @@ Recommendations of type `rule` or `slash-command`. Examples:
 
 ## `vibe-rule-creator`
 
-**Sphere:** Rule creation
+**Capability area:** Rule creation
 
-**Purpose:** A single-purpose skill that takes evidence from any skill and produces well-formed `CLAUDE.md` entries or `.cursor/rules/` files. It does not detect anything on its own.
+**Purpose:** A single-purpose skill that takes compatible evidence-backed recommendations and produces well-formed `CLAUDE.md` entries or `.cursor/rules/` files. It does not detect anything on its own.
 
 **What it observes:**
 
@@ -203,7 +435,7 @@ Always use the Composition API when writing Vue components. Never use the Option
 
 ## `vibe-doc-extractor`
 
-**Sphere:** Documentation extraction
+**Capability area:** Documentation extraction
 
 **Purpose:** Detect modules, APIs, and conventions that the user explains repeatedly in chat across any tool — strong signal they aren't documented in the project — and help write those docs into the codebase.
 
@@ -247,7 +479,7 @@ The draft is structured into a reference document — not a raw transcript copy.
 
 ## `vibe-prompt-engineer`
 
-**Sphere:** Prompt engineering
+**Capability area:** Prompt engineering
 
 **Purpose:** Identify recurring weaknesses in how the user prompts AI models — vagueness, missing constraints, conflicting instructions — and teach concrete improvements using before/after examples from the user's own history.
 

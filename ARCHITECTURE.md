@@ -1,334 +1,131 @@
 # Architecture
 
-This document describes the technical design of the platform: where data comes from, how the kernel processes it, how skills plug in, and how recommendations become artifacts. It is detailed enough to implement from — that's the goal.
+This document defines the architectural boundaries of vibe-os. The project is currently documentation-first: these are constraints for future tools, not claims that a shared runtime or package already exists.
 
----
+## Architectural position
 
-## Data sources
+vibe-os is a modular, format-neutral toolkit for AI-assisted software work.
 
-vibe-os reads session data from any supported AI coding tool. Each tool stores its session history locally in a different location and format. The kernel abstracts these differences behind a unified `Session` type.
+- There is no required runtime shared by every tool.
+- There is no universal output schema or installation format.
+- A tool owns its workflow and selects the implementation form that fits it.
+- Composition relies on explicit boundaries rather than inherited global behavior.
+- Shared infrastructure is introduced only after concrete reuse proves its value.
 
-### Claude Code
+This is deliberate. A terminal orchestrator, a transcript analyzer, and a review application have different needs. Forcing them through one kernel would create coupling without creating interoperability.
 
-```
-~/.claude/projects/<encoded-path>/<session-uuid>.jsonl
-```
+## Terminology
 
-The `<encoded-path>` is the absolute project path with `/` replaced by `-` (e.g. `/Users/alice/dev/myapp` → `-Users-alice-dev-myapp`). Each line in the JSONL file is one event.
+### Tool
 
-**Reliable event fields:**
+A **tool** is a user-facing contribution that improves an AI-assisted software workflow. It is the primary unit discussed in proposals, documentation, evaluation, and releases.
 
-| Field | Type | Description |
-|---|---|---|
-| `type` | string | Event type: `user`, `assistant`, `tool_result`, `summary` |
-| `uuid` | string | Event ID |
-| `timestamp` | string (ISO 8601) | When the event occurred |
-| `sessionId` | string | Session the event belongs to |
-| `message` | object | Present on `user` and `assistant` events |
+A tool may be implemented as a skill, agent, command, CLI, plugin, hook, integration, library, local service, application, or a deliberate combination of these forms.
 
-Assistant messages contain a `content` array of `text` and `tool_use` blocks. Tool results carry the output and an `is_error` flag.
+### Capability
 
-### Cursor
+A **capability** is what a tool enables a user or AI system to do. One tool may provide several closely related capabilities, but unrelated responsibilities should remain separate.
 
-```
-~/.cursor/projects/<encoded-path>/agent-transcripts/<session-uuid>.jsonl
-```
+### Capability family
 
-The `<encoded-path>` encoding follows the same convention as Claude Code. The event schema differs from Claude Code but maps to the same kernel types. The source adapter for Cursor handles this translation.
+A **capability family** groups related problems, such as decision support or session intelligence. Families help navigation and discussion; they do not impose package boundaries, APIs, ownership, or roadmap order.
 
-**What to treat with caution across both tools:**
-- Timestamps are reliable for ordering within a session; cross-session timezone handling needs care.
-- Token counts are not always present at the event level.
-- File content appearing inside tool calls should be treated as evidence of a touch, not as the canonical file source.
-- A user can have multiple sessions open in parallel for the same project.
+### Skill
 
-### Adding a new source
+A **skill** is one tool form: instructions and optional resources that teach an AI agent a repeatable workflow. Skills are expected to be common because they are lightweight, but they are not the architectural center of vibe-os.
 
-New tools are added by writing a source adapter — a module that reads the tool's raw session format and returns the kernel's `Session` type. The kernel's filter library and all skills work unchanged. See [CONTRIBUTING.md](CONTRIBUTING.md) for the adapter contract.
+### Shared foundation
 
----
+A **shared foundation** is infrastructure used by multiple tools: for example, an adapter library, context selector, evaluation harness, or artifact protocol. It becomes shared only after real consumers establish a stable common need.
 
-## Scope model
+## The tool boundary
 
-Every query and every artifact has a scope: **global** or **project**.
+Every tool must make the following contract understandable in its design and user documentation. This is a documentation contract, not a required machine-readable manifest.
 
-### Global scope
-
-- Loads sessions from all project directories across all supported tools.
-- Produces insights about the user as a person: habits, style, cross-project patterns.
-- Artifacts are written to global config locations: `~/.claude/CLAUDE.md`, `.cursor/rules/` (global), `~/.claude/skills/`, `~/.claude/commands/`.
-
-### Project scope
-
-- Loads sessions only for the current or named project, across all supported tools (Claude Code sessions for that project + Cursor sessions for the same project).
-- Produces insights about a specific codebase: its missing docs, project-specific rules, internal conventions.
-- Artifacts are written into the project itself: `<project-root>/CLAUDE.md`, `<project-root>/.cursor/rules/`, `<project-root>/docs/`.
-
-### How scope is selected
-
-Skills receive scope as an input — a CLI argument, an environment variable, or in conversational use, a prompt from the user. The kernel filter library accepts a `scope` parameter:
-
-- `{ kind: "global" }` — all projects, all tools
-- `{ kind: "project", path: "/abs/path/to/project" }` — one project, all tools
-
-The artifact router uses the same scope object to decide where to write outputs.
-
-### Deriving the project path
-
-When running inside an AI coding session, the current working directory is the project root. The kernel can derive the encoded path from it. Skills should not hard-code encoded paths — always derive them at runtime from the current directory or an explicit argument.
-
----
-
-## Substrate layers
-
-These are the shared building blocks all skills use. They are described here as interfaces — implementation language, file layout, and packaging are v0 decisions.
-
-### Source adapters
-
-**Responsibility:** Translate a tool's raw session format into the kernel's typed `Session` objects.
-
-**One adapter per tool:**
-- `adapters/claude-code.js` (or equivalent) — reads `~/.claude/projects/`
-- `adapters/cursor.js` — reads `~/.cursor/projects/`
-
-**Adapter contract:** Each adapter exports a single function:
-
-```
-readSessions(scope: Scope) → Session[]
-```
-
-It handles path encoding/decoding, JSONL parsing, and mapping to the shared `Session` type. It does not filter, redact, or analyze — that's downstream.
-
-### Session loader
-
-**Responsibility:** Given a scope, call the right adapters and return a merged, deduplicated list of `Session` objects.
-
-**Output — `Session` type:**
-
-```
-Session {
-  id: string
-  source: "claude-code" | "cursor" | string   // which tool produced it
-  projectPath: string                           // absolute project path
-  projectKey: string                            // encoded path key
-  startedAt: Date
-  endedAt: Date
-  model: string | null
-  events: Event[]                               // ordered
-  turnCount: number
-  isAbandoned: boolean                          // heuristic
-}
-```
-
-**Does not:** Parse file contents, count tokens precisely, or redact anything.
-
-### Filter library
-
-**Responsibility:** Apply common filters so skills don't repeat boilerplate.
-
-**Filters:**
-
-| Filter | Description |
+| Concern | Required answer |
 |---|---|
-| `byDateRange(start, end)` | Sessions that overlap the given period |
-| `byProject(path)` | Sessions for one project (all tools) |
-| `bySource(tool)` | Sessions from a specific tool only |
-| `byModel(modelId)` | Sessions that used a specific model |
-| `byToolUsed(toolName)` | Sessions containing a call to the named tool |
-| `byOutcome(outcome)` | `"success"`, `"abandoned"`, or `"error"` |
-| `containingText(text, role)` | Sessions where a message from the given role contains the text |
+| Outcome | What workflow problem does the tool solve, and which improvement dimension does it target? |
+| Trigger | When should a user or agent invoke it? |
+| Interface | What inputs does it accept and what outputs or effects does it produce? |
+| Environment | Which operating systems, AI tools, models, or hosts does it require? |
+| Dependencies | Which commands, services, credentials, repositories, or other tools must exist? |
+| Data boundary | What information does it read, retain, or send to an external provider? |
+| Side effects | What can it create, modify, execute, publish, or spend? |
+| Failure behavior | How does it report partial results, unavailable dependencies, and interrupted work? |
+| Evaluation | How will maintainers know that it improves the intended outcome? |
 
-### Redaction layer
+Different forms express this contract differently. A skill may document it in `SKILL.md`; a CLI may use its README and help output; a library may use API documentation and types. The information matters more than a uniform file layout.
 
-**Responsibility:** Strip sensitive content from text before passing it to a language model.
+## Choosing an implementation form
 
-**What it redacts:**
-- JWT tokens (`eyJ...` prefix)
-- API keys (`sk-`, `ghp_`, `Bearer `, long hex/base64 strings adjacent to known keywords)
-- `.env` file content (key=value lines)
-- Absolute file paths that contain usernames (replaced with `~`)
-- IP addresses and internal domain names (configurable; off by default)
+Use the smallest form that gives the workflow the reliability and experience it needs.
 
-**Behavior:**
-- Returns a redacted copy; never mutates the original.
-- Marks redacted spans so the skill can report "N secrets removed" without exposing what they were.
-- Pure function, no network access.
+| Form | Good fit |
+|---|---|
+| Skill | Reasoning-heavy or tool-guided workflows that an existing AI host can execute |
+| Agent or command | A focused delegated role or repeatable invocation inside a host |
+| CLI | Deterministic automation, scripting, pipelines, and machine-readable I/O |
+| Plugin, hook, or integration | Deep use of a host's lifecycle, UI, events, or permissions |
+| Library | Reusable logic with multiple concrete consumers |
+| Local service | Long-running coordination, state, scheduling, or inter-process access |
+| Application | Workflows that materially benefit from a dedicated interactive interface |
 
-**When to use it:** Every time user-authored text is passed to a language model. Stats-only skills that never call an LLM do not need to redact.
+Hybrid tools are valid. Keep the boundary between parts explicit—for example, a skill may guide judgment while a bundled CLI handles deterministic process management.
 
-### Recommendation contract
+## Composition
 
-**Responsibility:** Define the shape of every skill output so all skills speak the same language and downstream tools (rule-creator, artifact router) can consume any skill's output.
+Tools compose through documented interfaces such as:
 
-**Schema:**
+- files or structured artifacts;
+- standard input and output;
+- command-line exit status;
+- local APIs or sockets;
+- host-defined skill, plugin, hook, or agent protocols.
 
-```json
-{
-  "title": "string",
-  "summary": "string — 1-3 sentences: what was found and why it matters",
-  "evidence": [
-    {
-      "sessionId": "string",
-      "source": "string — which tool produced this session",
-      "projectKey": "string",
-      "timestamp": "string (ISO 8601)",
-      "excerpt": "string — relevant portion of the session, post-redaction"
-    }
-  ],
-  "scope": {
-    "kind": "global | project",
-    "path": "string | null"
-  },
-  "proposedArtifact": {
-    "type": "rule | skill | slash-command | agent | doc | note | stat | none",
-    "destination": "string — where the artifact should be written",
-    "content": "string — full draft content of the artifact"
-  },
-  "confidence": "high | medium | low",
-  "rationale": "string — why this confidence level; what would make it higher"
-}
-```
+Composition should preserve provenance and failure information. A tool that gathers results from several models, for example, should identify which provider produced each result and distinguish a failed consultation from an empty opinion.
 
-**Rules for producing recommendations:**
-- `evidence` must not be empty. At least one citation is required.
-- `excerpt` must be post-redaction.
-- `confidence: high` — pattern appeared in 5+ sessions or a very recent burst.
-- `confidence: low` — appeared twice, or an alternative explanation exists.
-- Return an empty list when no pattern is found. Never return a low-confidence placeholder.
+Do not require unrelated tools to share internal state, a database, or a lifecycle. When a shared protocol becomes useful, document versioning and compatibility at the boundary rather than exposing implementation internals.
 
-### Artifact router
+## Shared foundations
 
-**Responsibility:** Write approved artifacts to the right location, in the right format, without duplicating or conflicting with existing content.
+Shared foundations should emerge from repeated implementation pressure:
 
-**Destinations by type and scope:**
+1. Build the first tool with a clear local boundary.
+2. Observe a second tool needing substantially the same difficult capability.
+3. Compare the actual requirements and extract only the stable overlap.
+4. Test the shared component against both consumers.
+5. Keep tool-specific policy in the tools rather than pushing it into the shared layer.
 
-| Type | Global destination | Project destination |
-|---|---|---|
-| `rule` | `~/.claude/CLAUDE.md` | `<root>/CLAUDE.md` |
-| `rule` (Cursor) | `.cursor/rules/` (global) | `<root>/.cursor/rules/<name>.mdc` |
-| `skill` | `~/.claude/skills/<name>/SKILL.md` | Not applicable |
-| `slash-command` | `~/.claude/commands/<name>.md` | `<root>/.claude/commands/<name>.md` |
-| `agent` | `~/.claude/agents/<name>.md` | `<root>/.claude/agents/<name>.md` |
-| `doc` | Not applicable | `<root>/docs/<name>.md` |
-| `note` | `~/.claude/CLAUDE.md` (note block) | `<root>/CLAUDE.md` (note block) |
+This rule applies to runtimes, registries, configuration systems, permission models, adapters, evaluation harnesses, and UI frameworks. Reuse is evidence for an abstraction; imagined reuse is not.
 
-Before writing:
-1. Check for conflicting or duplicate content in the destination file. Surface conflicts before writing.
-2. For `rule` and `note` types, append under a section header; never replace the entire file.
-3. Show the exact diff to the user before confirming.
-4. Never write without explicit user confirmation.
+## Cross-cutting requirements
 
-### Skill registry
+### Transparency and control
 
-**Responsibility:** Allow skills to declare their outputs and discover other skills' outputs.
+Material data access, external calls, cost, and workspace changes must be understandable before they surprise the user. Each tool chooses confirmation points appropriate to its risk and host environment; vibe-os does not define a platform-wide permission engine at this stage.
 
-**What it tracks:**
-- Which skills are installed and from which source
-- What recommendation types each skill produces
-- What evidence types each skill consumes
+### Privacy and context
 
-**Primary use case:** `vibe-rule-creator` advertises that it consumes any recommendation with `proposedArtifact.type === "rule"`. Any other skill can emit such a recommendation and know that rule-creator will handle the writing.
+Tools should access and transmit only the context required for their outcome. Sensitive sources need safeguards proportional to their risk. External providers and retained data must be disclosed. Subsystems may impose stricter rules—for example, session intelligence requires redaction before user-authored transcript text is sent to a model.
 
----
+### Portability and vendor integration
 
-## Skill anatomy
+Project-level concepts should remain vendor-neutral. Provider-specific integrations are welcome when they create real value, but their behavior belongs behind a clear boundary. Supporting every provider is not required; documenting the supported environment is.
 
-```
-skills/
-└── <skill-name>/
-    ├── SKILL.md           — triggers, instructions, workflow (required)
-    ├── references/        — supplementary docs loaded on demand
-    ├── scripts/           — executable scripts using the kernel
-    └── fixtures/
-        ├── claude-code-example.jsonl   — synthetic Claude Code session
-        └── cursor-example.jsonl        — synthetic Cursor session
-```
+### Evaluation
 
-### What SKILL.md must contain
+Evaluation belongs to each tool because workflows have different success criteria. Prefer outcome measures over activity measures. Deterministic behavior should have automated tests; model-mediated behavior should use representative evaluations, human review, or both. Record important cost, latency, and quality tradeoffs.
 
-- **Frontmatter**: `name`, `description`
-- **Scope declaration**: which scopes and how behavior changes between them
-- **Source support**: which tools' sessions the skill analyzes (most skills should support all)
-- **Evidence spec**: what the skill looks for (tool types, message patterns, files, etc.)
-- **Output spec**: what recommendations it produces, with example `proposedArtifact` shapes
-- **Kernel dependencies**: which layers it uses
-- **LLM usage**: whether it calls a model, and at which step
+## Session intelligence as a subsystem
 
-### What a skill can assume
+Session intelligence is the first detailed subsystem design in vibe-os. It has its own shared kernel because several proposed tools consume the same local transcript sources and recommendation format.
 
-- The kernel provides typed `Session` objects.
-- Sessions from all supported tools are available through the same API.
-- The filter library is available and accepts the scope object.
-- The redaction layer is available as a pure function.
-- The artifact router handles all writes after approval.
+Its unified `Session` model, source adapters, global/project analysis scopes, redaction layer, recommendation contract, artifact router, and reference skill briefs are documented in [docs/session-intelligence.md](docs/session-intelligence.md).
 
-### What a skill must not do
+Those interfaces are public within that subsystem. They are not universal vibe-os interfaces. A terminal orchestrator or model-review tool does not need to load sessions or emit a session-backed recommendation unless its own workflow calls for it.
 
-- Read JSONL files or tool-specific directories directly.
-- Write to disk without the artifact router.
-- Pass un-redacted user text to a language model.
-- Make network calls without disclosing them in SKILL.md.
-- Produce recommendations without evidence citations.
-- Assume sessions come from one specific tool.
+## Repository evolution
 
----
+The repository should gain structure from implemented tools rather than from an empty taxonomy. Do not create one directory per capability family in advance. When the first tool of a form is added, document a minimal convention for that form; revise it when a second implementation exposes real differences.
 
-## Privacy and cost model
-
-### Local-first default
-
-All data processing runs locally. The kernel reads files from the local filesystem. No data leaves the machine unless the user explicitly opts in to a skill that requires it.
-
-### Redaction-before-LLM
-
-Any skill that calls a language model must pass its inputs through the redaction layer first. This applies to local model calls as well.
-
-### External call disclosure
-
-Skills that require external calls must:
-- Disclose this in their `SKILL.md` under a `## External calls` section.
-- Require explicit user opt-in at runtime.
-- Never send more data than the minimum required.
-
-### Cost model
-
-Skills that use language models should prefer:
-1. Local models for tasks that don't require high capability.
-2. The model already active in the session (no extra cost).
-3. An explicit cost disclosure if the skill would incur additional API cost.
-
----
-
-## Data flow
-
-```mermaid
-flowchart TB
-    ClaudeData["~/.claude/projects/**/*.jsonl\n(Claude Code)"]
-    CursorData["~/.cursor/projects/**/agent-transcripts/*.jsonl\n(Cursor)"]
-    Adapters["Source Adapters\n(one per tool)"]
-    Loader["Session Loader\n(unified Session type)"]
-    Filters["Filter Library"]
-    Redact["Redaction Layer"]
-    Skill["Skill\n(analysis + optional LLM)"]
-    Contract["Recommendation\n(contract-shaped output)"]
-    Router["Artifact Router"]
-    Approval["User Approval"]
-    Artifact["Written Artifact\n(rule, doc, skill, command...)"]
-    Registry["Skill Registry"]
-
-    ClaudeData --> Adapters
-    CursorData --> Adapters
-    Adapters --> Loader
-    Loader --> Filters
-    Filters --> Redact
-    Redact --> Skill
-    Registry -.-> Skill
-    Skill --> Contract
-    Contract --> Router
-    Router --> Approval
-    Approval --> Artifact
-    Artifact -.improves.-> ClaudeData
-    Artifact -.improves.-> CursorData
-```
-
-The dashed arrows back to the data sources represent the closed loop: artifacts improve future sessions, which produce better evidence, which produce better recommendations.
+Architecture decisions that affect only one tool stay with that tool. Decisions shared across tools belong here once they are proven. Detailed subsystem contracts belong in dedicated documents, as session intelligence does today.

@@ -1,188 +1,141 @@
 # Contributing
 
-This project grows by adding skills. A skill is a focused piece of analysis — evidence in, recommendation out — that lives in one of the [directions of growth](PHILOSOPHY.md#directions-of-growth) described in the philosophy doc. This guide explains how to propose, build, and submit a skill.
+vibe-os grows by solving concrete problems in AI-assisted software work. Contributions are not limited to skills: a tool may be a command, agent, CLI, plugin, integration, library, service, application, or a combination that fits the workflow.
 
----
+This guide keeps proposals comparable without forcing every tool into one runtime or repository shape.
 
 ## Before you build
 
-**Read the philosophy.** Every skill must be evidence-driven, suggest rather than mutate, support both scopes, handle sessions from all supported tools uniformly, and conform to the recommendation contract. If any of those constraints feel wrong for your idea, raise that in an issue before writing code.
+1. Read [PHILOSOPHY.md](PHILOSOPHY.md) and [ARCHITECTURE.md](ARCHITECTURE.md).
+2. Search the repository for an existing tool or proposal that addresses the same workflow.
+3. Identify the user problem and intended outcome before choosing an implementation form.
+4. Check whether the idea belongs inside an existing tool, composes with one, or is coherent enough to stand alone.
 
-**Check what already exists.** Browse `skills/` to make sure you're not duplicating an existing skill. If a similar skill exists but doesn't cover your use case, consider extending it rather than creating a new one — or open an issue to discuss the boundary.
+A new capability family is not required before proposing a tool. Families describe the portfolio; they are not approval gates.
 
-**Identify your sphere.** Locate the [directions of growth](PHILOSOPHY.md#directions-of-growth) section and find the sphere your skill belongs in. If your idea doesn't fit any existing sphere, that's interesting — open an issue with a proposal for a new direction before starting.
+## Step 1: Write a tool brief
 
----
+Start with a concise brief in an issue, proposal document, or PR description. It must answer:
 
-## Step 1: Write a skill brief
+- **Problem:** What repeatedly goes wrong, takes too long, costs too much, or produces weak results?
+- **User and workflow:** Who encounters the problem, and at which point in AI-assisted software work?
+- **Outcome:** Which dimensions improve—quality, speed, cost, autonomy, context, learning, interoperability, or control?
+- **Success evidence:** What observation or evaluation would show that the tool helped?
+- **Workflow:** What happens from invocation through completion, including important failure paths?
+- **Form:** Why is this best implemented as a skill, command, CLI, plugin, library, service, application, or hybrid?
+- **Interface:** What are the inputs, outputs, and material side effects?
+- **Environment:** Which AI hosts, models, operating systems, and external commands or services are required?
+- **Data boundary:** What does the tool read, retain, or send outside the machine?
+- **Cost:** Can it create provider, compute, or infrastructure charges?
+- **Alternatives:** What simpler approach or existing tool was considered, and why is it insufficient?
 
-Before writing any code, write a one-page skill brief. This is a short document (can be a GitHub issue, a PR description, or a markdown file) that answers:
+The brief should be detailed enough to reveal product and architecture problems before implementation, but it does not need a formal schema.
 
-- **What does this skill observe?** Which session fields, message patterns, tool calls, or file references does it look at?
-- **Which tools does it support?** Can it analyze Claude Code sessions, Cursor sessions, or both? If only one — why?
-- **What does it recommend?** What artifact type does it propose (`rule`, `slash-command`, `doc`, `agent`, `skill`, `stat`, `note`)?
-- **What does the evidence look like?** Give a concrete example of a session excerpt that would trigger a recommendation.
-- **What is the proposed artifact?** Give a concrete example of what the output would look like.
-- **Which scopes does it support?** Global, project, or both? If only one — why?
-- **Does it need an LLM call?** If yes, at which step, and what is passed to the model?
+## Step 2: Choose the smallest suitable form
 
-The brief exists to catch design problems early. A skill that doesn't have a brief is not ready for review.
+Let the workflow determine the artifact:
 
----
+- Use a **skill** when an existing AI host can perform the workflow reliably from instructions and available tools.
+- Use an **agent or command** for a focused role or repeatable host-native invocation.
+- Use a **CLI** for deterministic automation, scripting, process control, or structured I/O.
+- Use a **plugin, hook, or integration** when the value depends on a host's lifecycle, UI, events, or permissions.
+- Use a **library** only when multiple concrete consumers need reusable logic.
+- Use a **service or application** when persistent state, coordination, scheduling, or a dedicated interface is essential.
 
-## Step 2: Create the skill directory
+Hybrid designs are welcome when each part has a clear responsibility. Avoid adding a runtime, framework, or service only for hypothetical future reuse.
 
-```
-skills/
-└── <your-skill-name>/
-    ├── SKILL.md
-    ├── references/      (optional)
-    ├── scripts/         (optional)
-    └── fixtures/
-        ├── claude-code-example.jsonl   (synthetic Claude Code session)
-        └── cursor-example.jsonl        (synthetic Cursor session, if applicable)
-```
+## Step 3: Document the tool boundary
 
-Naming conventions:
-- All lowercase, hyphen-separated: `vibe-doc-extractor`, not `DocExtractor`
-- Name describes what it does: `vibe-rule-creator`, not `vibe-rule-finder`
-- Use the `vibe-` prefix for consistency with the seed skills (optional but recommended for discoverability)
+The implementation must make these facts easy to find:
 
----
+- when and how to invoke the tool;
+- required dependencies and supported environments;
+- accepted inputs and produced outputs;
+- files, commands, network services, and providers it can access;
+- possible mutations and costs;
+- partial-failure and recovery behavior;
+- how to uninstall, disable, or undo material changes when applicable.
 
-## Step 3: Write `SKILL.md`
+Use the native documentation surface of the chosen form. For example, a skill uses `SKILL.md`, a CLI uses help output and a README, and a library uses types and API documentation. vibe-os does not currently require a universal manifest.
 
-`SKILL.md` is both the skill's documentation and its operational instructions.
+## Step 4: Build for explicit composition
 
-### Required frontmatter
+Prefer stable, inspectable boundaries: files, structured output, standard streams, exit codes, local APIs, or host-native protocols. Preserve provenance when combining results from models or tools.
 
-```yaml
----
-name: your-skill-name
-description: >
-  One concise paragraph describing what this skill does and when to invoke it.
-  Be specific about trigger conditions. Mention the scope(s) and supported tools.
----
-```
+Do not make unrelated tools depend on hidden global state. If a shared component appears necessary, show at least two concrete consumers and explain the stable overlap. Tool-specific policy stays inside the tool.
 
-### Required body sections
+## Step 5: Evaluate the intended outcome
 
-**`## Scope`**
-Which scopes this skill supports and what changes between global and project scope. If a scope is not supported, explain why.
+Every contribution needs an evaluation appropriate to its behavior.
 
-**`## Tool support`**
-Which AI tools' sessions this skill analyzes (Claude Code, Cursor, or both). If only one — explain why. Skills that can support both should support both.
+### Deterministic tools
 
-**`## Evidence spec`**
-What the skill looks for. Be specific enough that a developer can write the filter logic directly from this section.
+- Test normal inputs, invalid inputs, missing dependencies, partial failure, and cleanup.
+- Verify machine-readable output and exit behavior where applicable.
+- Include offline fixtures when the tool parses external formats.
 
-**`## Output spec`**
-What recommendations the skill produces. Include an example recommendation in the [recommendation contract](ARCHITECTURE.md#recommendation-contract) schema.
+### Model-mediated tools
 
-**`## Kernel usage`**
-Which substrate layers the skill uses:
-- Source adapters (specify which tools)
-- Session loader (always)
-- Filter library (which filters)
-- Redaction layer (yes/no — required if any LLM calls are made)
-- Artifact router (always — never write directly)
-- Skill registry (optional)
+- Use realistic prompts and representative projects or synthetic fixtures.
+- Compare against a meaningful baseline when claiming improvement.
+- Include human review for outcomes that cannot be reduced to reliable assertions.
+- Record quality alongside relevant latency, token, and cost tradeoffs.
 
-**`## LLM usage`** (required)
-If the skill calls a language model: which step, what input is passed (post-redaction), what the model is asked to do. If the skill does not call a model, state that explicitly — it's useful information.
+### Integrations and applications
 
-**`## External calls`** (required if applicable)
-Any network calls, their purpose, what data is sent, and how the user opts in. Omit this section if there are none.
+- Test supported host versions and degraded behavior when the host or service is unavailable.
+- Verify that data access, external calls, and user-visible mutations match the documentation.
 
----
-
-## Step 4: Provide fixtures
-
-Every skill must include at least one synthetic JSONL session file in `fixtures/` that exercises its core detection logic. Skills that support multiple tools should include a fixture for each.
-
-Fixtures must:
-- Be valid JSONL (one event object per line).
-- Contain no real user data — fabricate realistic-looking but fictional sessions.
-- Use the correct event schema for the tool they represent (Claude Code or Cursor).
-- Cover the positive case (the pattern the skill is looking for is present).
-- Ideally also cover a negative case (pattern is absent, skill correctly returns no recommendation).
-
----
-
-## Step 5: Verify against the checklist
-
-**Philosophy compliance**
-- [ ] Every recommendation cites at least one session in `evidence[]`
-- [ ] `excerpt` in each evidence item is post-redaction text
-- [ ] The skill never writes to disk — it produces a recommendation for the artifact router
-- [ ] The skill does not call a language model with un-redacted user text
-- [ ] The skill supports global scope, project scope, or both — and SKILL.md states which
-- [ ] The skill does not assume sessions come from a single specific tool
-
-**Recommendation contract**
-- [ ] Every output conforms to the schema in [ARCHITECTURE.md](ARCHITECTURE.md#recommendation-contract)
-- [ ] `evidence[]` includes the `source` field for each citation
-- [ ] `confidence` reflects real signal strength
-- [ ] `proposedArtifact.type` is one of the valid types
-- [ ] The skill returns an empty list when no pattern is found
-
-**SKILL.md completeness**
-- [ ] Frontmatter has `name` and `description`
-- [ ] `## Scope` section present
-- [ ] `## Tool support` section present
-- [ ] `## Evidence spec` specific enough to implement from
-- [ ] `## Output spec` with a concrete example
-- [ ] `## Kernel usage` present
-- [ ] `## LLM usage` present (even if "none")
-
-**Fixtures**
-- [ ] At least one fixture JSONL in `fixtures/`
-- [ ] Fixture covers the positive detection case
-- [ ] Fixture contains no real user data
-- [ ] Fixture uses the correct schema for the tool it represents
-
-**Kernel discipline**
-- [ ] Skill does not open JSONL files directly
-- [ ] Skill uses the filter library
-- [ ] Skill uses the redaction layer before any LLM call
-- [ ] Skill does not hard-code tool-specific paths
-
----
+An evaluation can begin small, but it must test the claimed outcome rather than only proving that the tool runs.
 
 ## Step 6: Open a pull request
 
-PR description should include:
-- Link to or inline copy of the skill brief
-- Summary of any design decisions that differed from the brief
-- Which seed skill this is most similar to, and how it differs
-- Whether any new kernel functionality was needed (and if so, whether a separate PR adds it)
+The PR should include:
 
----
+- the tool brief or a link to it;
+- the capability families it touches, for navigation only;
+- the implemented form and why it fits;
+- supported environments and known limitations;
+- evaluation results and reproduction steps;
+- data, cost, and side-effect disclosures;
+- any shared infrastructure added and the concrete consumers that justify it.
 
-## Adding a source adapter (new tool support)
+## Contribution checklist
 
-To add support for a new AI tool's session format:
+### Product
 
-1. Write a source adapter in `adapters/<tool-name>.js` (or equivalent) that exports `readSessions(scope: Scope) → Session[]`.
-2. The adapter is responsible for: finding the tool's session files, parsing the raw format, and mapping events to the kernel's `Session` and `Event` types.
-3. Provide at least one fixture JSONL file in `adapters/fixtures/<tool-name>/` showing the raw format.
-4. Update `ARCHITECTURE.md` to document the new tool's session location and any format quirks.
-5. Existing skills should work without modification — the adapter handles all translation.
+- [ ] Solves a specific AI-assisted software-work problem.
+- [ ] States the intended outcome and important tradeoffs.
+- [ ] Uses the smallest suitable implementation form.
+- [ ] Does not duplicate an existing tool without a clear reason.
 
----
+### Architecture
 
-## Proposing a new sphere
+- [ ] Inputs, outputs, dependencies, and side effects are explicit.
+- [ ] Provider-specific behavior is isolated and documented.
+- [ ] Composition uses inspectable boundaries rather than hidden shared state.
+- [ ] New shared infrastructure has more than one concrete consumer.
 
-Open an issue before writing anything. Include:
-- A plain-language description of the sphere
-- Why it belongs in this project (which [core beliefs](PHILOSOPHY.md#core-beliefs) does it embody?)
-- A sketch of what one or two skills in this sphere would do
-- What artifact types they would produce
+### Trust
 
-New spheres are welcome. The bar: grounded in session evidence, closes a real loop, produces artifacts that improve future sessions.
+- [ ] Sensitive data access and external calls are disclosed.
+- [ ] Context sent to models or services is limited to what the workflow needs.
+- [ ] Costs and workspace mutations are predictable.
+- [ ] Failure does not silently present partial work as complete.
 
----
+### Quality
+
+- [ ] Evaluation exercises the claimed outcome.
+- [ ] Important failure and degraded-mode scenarios are covered.
+- [ ] Documentation matches the implemented behavior.
+- [ ] Examples and fixtures contain no real secrets or private user data.
+
+## Session-intelligence contributions
+
+Tools that analyze recorded AI sessions follow additional subsystem contracts: unified source adapters, global/project analysis scopes, transcript redaction, evidence-backed recommendations, and the recommendation schema. These requirements are documented in [docs/session-intelligence.md](docs/session-intelligence.md).
+
+They apply because of the data and composition needs of that subsystem, not because every vibe-os tool must analyze sessions.
 
 ## Code of conduct
 
-Be specific. Be evidence-driven. Don't moralize. When in doubt, look at how the seed skills handle the same situation.
+Be specific, evidence-minded, and honest about uncertainty. Critique ideas and implementations without moralizing about the people behind them. Quality matters more than speed or feature count.

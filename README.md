@@ -1,64 +1,88 @@
 # vibe-os
 
-Your AI conversations are evidence about how you actually work. Every message you send, every tool that runs, every file that gets read, every retry you force — all of it is recorded locally by your AI coding tools. Today that evidence sits on disk and rots. **vibe-os** turns it into reusable artifacts: rules, skills, slash commands, agents, and documentation — at both global and per-project scope.
+**vibe-os is a modular toolkit for improving AI-assisted software work.**
 
-## Supported tools
+AI coding tools are capable, but the workflows around them are still young. Important context is lost between sessions. Reviews depend on one model's perspective. Repetitive steps stay manual. The wrong model consumes too much time or money. Useful lessons remain buried in transcripts.
 
-| Tool | Session location |
+vibe-os exists to improve that whole system: how people plan, prompt, delegate, execute, verify, learn, and ship with AI.
+
+## What the project optimizes
+
+Every vibe-os tool should make at least one meaningful dimension of AI-assisted software work better.
+
+| Dimension | What improvement looks like |
 |---|---|
-| Claude Code | `~/.claude/projects/<encoded-path>/*.jsonl` |
-| Cursor | `~/.cursor/projects/<encoded-path>/agent-transcripts/*.jsonl` |
+| Quality | More correct, robust, maintainable outcomes |
+| Speed | Less time and fewer turns from intent to verified result |
+| Cost | Better model and context choices for the value produced |
+| Autonomy | More work completed safely without unnecessary supervision |
+| Context | The right information reaches the right model at the right time |
+| Learning | Past work becomes reusable knowledge and better future behavior |
+| Interoperability | Tools and models can cooperate instead of becoming isolated silos |
+| Control | Users can understand and direct what the system reads, sends, and changes |
 
-The kernel abstracts both formats behind a unified `Session` type. Skills work the same way regardless of source.
+These dimensions can conflict. A tool that saves time by weakening verification is not an unconditional improvement. Good tools state their tradeoffs and evaluate the outcome that matters.
 
-## The problem
+## What counts as a vibe-os tool
 
-When you work with AI coding tools every day, you develop patterns. You re-type the same context. You re-state the same constraints. You explain the same module for the fifth time because it was never documented. You hit the same failure mode in every debugging session. You build a workflow in your head that would take five minutes to formalize — but you never do.
+A **tool** is a user-facing contribution that improves an AI software workflow. The implementation form follows the problem. A tool may be:
 
-None of this is visible. There's no mirror.
+- a skill that teaches an AI agent a repeatable workflow;
+- an agent or command with a focused responsibility;
+- a CLI or local service that performs deterministic work;
+- a plugin, hook, or integration that connects existing tools;
+- a reusable library shared by several workflows;
+- an application when a dedicated interface materially improves the experience.
 
-## The shape of the solution
+Skills will often be the smallest and most effective form, but vibe-os is not defined by a single packaging format or runtime.
 
-A shared kernel parses and indexes your session history from any supported tool. A growing set of skills — each focused on one angle — analyzes that data and surfaces concrete, evidence-backed recommendations. Every recommendation shows you which sessions it came from, proposes a specific artifact, and waits for your approval before writing anything.
+## Capability families
 
-The kernel and the recommendation contract are stable. The skills are where the project grows — and where contributors come in.
+Capability families organize related problems without prescribing a backlog or architecture.
 
-## Operating scopes
+| Family | Example directions |
+|---|---|
+| Decision support | Independent model opinions, plan critique, alternative approaches |
+| Orchestration | Delegation, parallel work, handoffs, workflow automation |
+| Context and memory | Context selection, durable knowledge, cross-session continuity |
+| Session intelligence | Learn from transcripts, failures, repetition, and successful patterns |
+| Quality and evaluation | Review, verification, regression detection, workflow benchmarking |
+| Model and cost optimization | Model routing, token efficiency, latency and budget tradeoffs |
+| Integrations | Connect AI tools, terminals, editors, repositories, and delivery systems |
 
-Every skill in this project works at two scopes:
+The families are non-exclusive. A multi-model reviewer, for example, may combine decision support, orchestration, and evaluation.
 
-- **Global** — across all your projects and sessions. Useful for personal habits, prompting patterns, cross-project waste, and anything that lives in `~/.claude/` or equivalent global config.
-- **Project** — restricted to one project's sessions. Useful for missing project docs, project-specific rules, and workflows that only make sense inside one codebase. Artifacts are written into that project's `CLAUDE.md`, `.cursor/rules/`, or `docs/`.
+## Architecture
 
-When you run a skill, you choose the scope. The default is whichever makes more sense for that skill's purpose.
+vibe-os is format-neutral and modular:
 
-## Seed skills
+- Each tool owns its workflow, dependencies, inputs, outputs, side effects, and evaluation method.
+- Tools expose clear boundaries so they can be used independently and composed deliberately.
+- Shared infrastructure is extracted only after multiple real tools need the same capability.
+- There is no universal runtime, output schema, or installation mechanism at this stage.
 
-These skills ship with the project to demonstrate every layer of the platform:
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the architectural boundaries and terminology.
 
-| Skill | Sphere | What it does |
-|---|---|---|
-| `vibe-stats` | Insightful stats | Behavioral statistics that change how you work |
-| `vibe-token-optimizer` | Token optimization | Finds token waste and recommends concrete trims |
-| `vibe-repetition-detector` | Pattern extraction | Surfaces recurring prompts, instructions, and sequences |
-| `vibe-rule-creator` | Rule creation | Turns evidence into draft `CLAUDE.md` / `.cursor/rules/` entries |
-| `vibe-doc-extractor` | Documentation extraction | Finds undocumented modules you keep explaining in chat |
-| `vibe-prompt-engineer` | Prompt engineering | Teaches concrete prompt improvements from your own history |
+## Session intelligence
 
-See [docs/seed-skills.md](docs/seed-skills.md) for design briefs on each.
+The original foundation of vibe-os—analyzing local AI coding sessions and turning evidence into useful recommendations—remains an important capability family. Its source adapters, unified session model, privacy rules, recommendation contract, and proposed reference tools now live in [docs/session-intelligence.md](docs/session-intelligence.md).
 
-## Directions of growth
+Those contracts apply to session-intelligence tools. They are not requirements for every tool in vibe-os.
 
-The seed skills cover six spheres. There are many more. See [PHILOSOPHY.md](PHILOSOPHY.md) for the full map and the principles that guide what belongs in this project.
+## Project status
+
+vibe-os is currently in its foundation stage. The repository defines the mission, architecture, contribution standard, and the preserved design for session intelligence. It does not yet publish a stable installable toolkit.
+
+The next implementation priority will be selected through evidence and explicit evaluation rather than being implied by the foundation documents.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). The short version: pick a sphere, write a skill brief, use the kernel, follow the recommendation contract, support both scopes, provide offline-runnable fixtures.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) to propose a tool. Start with the workflow problem and intended improvement, then choose the implementation form that fits.
 
 ## Further reading
 
-- [PHILOSOPHY.md](PHILOSOPHY.md) — core beliefs and directions of growth
-- [ARCHITECTURE.md](ARCHITECTURE.md) — kernel layers, recommendation contract, scope model, privacy rules
-- [CONTRIBUTING.md](CONTRIBUTING.md) — how to add a skill
-- [docs/seed-skills.md](docs/seed-skills.md) — design briefs for all seed skills
-- [docs/roadmap.md](docs/roadmap.md) — what ships in each version
+- [PHILOSOPHY.md](PHILOSOPHY.md) — product principles and capability map
+- [ARCHITECTURE.md](ARCHITECTURE.md) — modular architecture and tool boundaries
+- [CONTRIBUTING.md](CONTRIBUTING.md) — how to propose, build, and evaluate a tool
+- [docs/session-intelligence.md](docs/session-intelligence.md) — preserved session-intelligence subsystem design
+- [docs/roadmap.md](docs/roadmap.md) — foundation-first sequencing and open decisions
