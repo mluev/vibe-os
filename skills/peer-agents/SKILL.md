@@ -1,169 +1,141 @@
 ---
 name: peer-agents
-description: Bring independent AI peers from fresh Claude Code, Codex, or Cursor sessions into the current workflow for advice, critique, alternative approaches, comparison, or bounded delegated work. Use whenever the user explicitly asks to ask another AI, get a second or outside opinion, compare model answers, have Claude/Codex/Cursor review or help, delegate work to a peer, or configure peer checkpoints. Do not launch peers proactively unless an installed user rule requests it.
-compatibility: macOS with cmux and at least one supported peer CLI (Claude Code, Codex, or Cursor Agent); direct headless fallback is available with user approval.
+description: Open fresh Claude Code, Codex, or Cursor sessions in visible cmux tabs and use them as independent colleagues — for a second opinion, planning, review, comparison, or delegated help. Use whenever the user wants an opinion from another AI, wants Codex/Cursor/Claude to check, review, or plan something, wants to compare model answers, wants several agents to plan or explore approaches in parallel, or wants to delegate bounded work to a peer session. Keep the sessions interactive so the coordinating AI can read their chats and ask follow-ups.
+compatibility: macOS with cmux and at least one supported AI CLI (Claude Code, Codex, or Cursor Agent).
 ---
 
 # Peer Agents
 
-Bring another AI into the work as an independent peer, not as an echo of the current session. The value comes from assigning the right role, preserving a separate line of reasoning, and returning useful disagreement with clear provenance.
+Bring another AI into the current work as a visible, independent colleague — not
+an echo of the current session. The coordinator opens fresh AI chats in cmux,
+gives each a useful role, reads their answers from the terminal, follows up when
+needed, and returns its own judgment in the main chat.
 
-The current session is the coordinator. It decides what perspective or contribution is missing, gives each peer only the context needed for that role, supervises the run, and makes the final judgment. A peer never becomes the uncredited source of the coordinator's answer.
+## Why bring in peers
 
-Read [references/tools.md](references/tools.md) before setup or execution. It is the sole operational reference for choosing models and modes, operating cmux, Claude Code, Codex, and Cursor, managing worktrees and sessions, and installing workflow rules.
+The useful question is not *which model is best* — it is *which role is missing*.
+A second AI is worth the cost when its **separate line of reasoning** adds
+something the current session cannot produce on its own:
 
-## Operating principles
+- **Combine compute, don't pick one.** Two independent thought chains, merged
+  with attribution, beat a single chain — one model's planning depth complements
+  another's execution or breadth.
+- **Break the echo chamber.** A fresh session with no exposure to the
+  coordinator's reasoning won't rationalize the coordinator's mistakes.
+- **Different model families fail differently.** A different family catches bugs,
+  blind spots, and bad assumptions that the same family would repeat.
+- **No self-grading.** Independent review and verification are only meaningful
+  when the reviewer is not the author.
+- **Cheap parallel exploration.** Several peers can chase alternative approaches
+  at once, so you compare real options instead of imagining them.
 
-1. **Role is not model.** Define the contribution first—critic, alternative planner, reviewer, implementer, verifier, researcher, or another bounded role—then choose a suitable model and tool.
-2. **Independence is deliberate.** Fresh peers do not receive other peers' answers. Do not preload the coordinator's full reasoning when the peer is meant to supply an outside view.
-3. **Diversity means model-family diversity.** A different CLI using the same underlying model is not an independent model perspective. Prefer a different family from the coordinator when the model is known.
-4. **Context is selected, not dumped.** Send the request, relevant repository paths or artifacts, constraints, and success evidence. Do not send unrelated transcript history, secrets, or private material.
-5. **Authority follows intent.** Advice is read-only. Editing requires an explicit delegation and an isolated worktree. Never merge, cherry-pick, commit to the user's branch, or delete a worktree unless separately requested.
-6. **Synthesis preserves provenance.** Combine compatible insights, retain valuable disagreement, and explain rejected recommendations. Do not vote, average, or concatenate blindly.
+This skill gives you the *ability* and the *reasons*. You write the actual
+prompts and decide the use case.
 
-## Activation
+Read [references/tools.md](references/tools.md) before launching peers. It is the
+only operational reference.
 
-Activate only when the user explicitly requests another AI or when a user-installed workflow rule calls for this skill. Ordinary planning, implementation, or review does not trigger it automatically.
+## When it fires
 
-Treat the user's explicit request as consent for an ordinary configured read-only consultation. Confirm before launch when:
+Use this skill only when the user explicitly asks for another AI, or when an
+installed workflow rule requests a peer checkpoint. It never launches peers on its
+own. Natural triggers include:
 
-- the necessary context is sensitive or unexpectedly broad;
-- editing authority is unclear;
-- the requested panel materially exceeds saved cost or latency preferences;
-- the requested provider is unavailable and substitution would change intent;
-- cmux is unavailable and direct headless execution would reduce visibility.
+- "get an opinion from another agent" / "ask another AI what it thinks"
+- "check it with Codex" / "have Cursor review my work"
+- "plan it across several agents" / "let a few agents explore approaches"
+- "compare Claude vs Cursor on this" / "which approach do the others prefer"
+- "delegate this to a peer" / "have another agent implement it"
 
-## Load preferences
+Ordinary planning and review do not trigger it. An explicit request normally
+authorizes opening the requested read-only or plan sessions. Ask before sending
+unusually sensitive context, starting an expensive panel, substituting a
+specifically requested provider or model, or giving a peer editing authority the
+user did not request.
 
-Use this precedence, with later discovery never overriding an earlier explicit choice:
+## Patterns
 
-1. Current user request: provider, model, count, role, access, and output instructions.
-2. Project override at `<repo>/.vibe-os/peer-agents.yaml`, when present.
-3. Global preferences at `~/.config/vibe-os/peer-agents.yaml`.
-4. Safe defaults below.
+Starting points, not scripts — pick one, combine them, or invent your own. The
+user's prompt and goal decide the shape.
 
-Safe defaults:
+- **opinion** — put the same question to one or two peers independently, then
+  compare their answers side by side.
+- **fusion** — peers work in parallel; the coordinator merges the results with
+  attribution, calling out consensus versus divergence.
+- **validate / gate** — a peer defines acceptance criteria up front or reviews
+  the finished work. The author never validates its own output.
+- **plan** — one or more peers produce alternative implementation or migration
+  plans to compare against the coordinator's.
+- **review** — a peer critiques a diff, plan, or artifact and cites concrete
+  evidence from the real project.
+- **delegate** — a peer implements a bounded task (see [Editing peers](#editing-peers)).
 
-- one peer;
-- a provider and underlying model family different from the coordinator;
-- fresh session;
-- read-only access;
-- one cmux workspace for the batch;
-- synthesis with attributed findings;
-- preserve the peer workspace when follow-up may be useful.
+## Core principles
 
-If the global file does not exist, perform first-run setup before the first launch:
+- **Role is not model.** Decide the missing contribution first — critic,
+  alternative planner, reviewer, verifier, implementer — then choose a provider.
+- **Independence is deliberate.** Do not feed parallel peers one another's answers
+  in the first round, and do not preload the coordinator's full reasoning when the
+  peer is meant to supply an outside view. A later "critique this answer" exchange
+  is a separate stage.
+- **Diversity means model-family diversity.** A different CLI running the same
+  underlying model is not an independent perspective. Prefer a different family
+  when the model is known; if the family is unknown, say so rather than claim
+  diversity.
+- **Select context, don't dump it.** Send the request, the relevant paths and
+  facts, the constraints, and what a good answer looks like — not the whole
+  transcript, a premature conclusion, or private material.
+- **Authority follows intent.** Advice is read-only. Editing requires an explicit
+  delegation; never merge, discard, clean, or commit another peer's work without
+  a separate request.
+- **Synthesis preserves provenance.** Attribute each contribution, keep valuable
+  disagreement, and explain what you rejected. Do not vote, average, or
+  concatenate blindly. The coordinator checks claims and owns the final call.
 
-1. Detect cmux and the supported CLIs without making a model call.
-2. Discover locally advertised models where the CLI supports it.
-3. Ask which providers to enable and whether each should use its CLI default or a named model. Do not infer these preferences merely because a provider was mentioned; a dry-run proposal must still surface the choices as explicit questions.
-4. Explain that prompts and selected repository context are sent to those providers and may create charges.
-5. State the effective precedence—explicit request, project override, global preferences, then safe defaults—so the user can predict which setting wins.
-6. Show the proposed YAML and obtain approval before writing it. Store commands and preferences only—never credentials.
+## Workflow
 
-Use this minimal shape:
+1. **Understand the work.** Inspect the relevant repository, sibling project,
+   diff, plan, or artifact before briefing peers. Give concrete paths and facts.
+2. **Choose peers.** Honor explicit provider, model, count, role, and mode
+   requests. Otherwise pick one complementary peer with a clear role.
+3. **Open visible sessions.** Use cmux to create one named workspace for the
+   consultation and one terminal tab or pane per peer. Launch the real interactive
+   Claude, Codex, or Cursor UI in the project directory. Do not hide a provider
+   behind a worker process or redirect its chat to files — the user should be able
+   to watch and take over every peer.
+4. **Brief each peer in chat.** After the UI is ready, send one concise prompt
+   with its role and objective, the relevant paths, the requested deliverable, the
+   constraints (including plan/read-only intent), a request to inspect the real
+   project and surface uncertainty, and a note to work independently without
+   spawning more agents. Tell each peer the distinct contribution it owns.
+5. **Collaborate through the tab.** Read the screen to follow progress and extract
+   the answer. When it is incomplete, ambiguous, or worth challenging, send a
+   follow-up into the same tab. Use judgment, not a rigid completion protocol.
+   Report authentication, quota, model, or tool errors plainly — never call a
+   silent, failed, or blocked peer an agreement.
+6. **Synthesize.** Return the coordinator's conclusion, each peer's attributed
+   contribution (with provider/model when known), the important agreement and
+   disagreement, the recommended next action, and any failure plus which tabs
+   remain open. Leave sessions open for follow-up; close them only when asked.
 
-```yaml
-version: 1
-providers:
-  claude: {enabled: true, command: claude, model: default}
-  codex: {enabled: true, command: codex, model: default}
-  cursor: {enabled: false, command: agent, model: default}
-defaults:
-  peers: 1
-  cmux_layout: batch-workspace
-  result_style: synthesis-with-attribution
-```
+If cmux is inaccessible, explain that the sessions cannot be opened visibly from
+the current process and ask whether to retry from inside cmux or continue without
+it.
 
-Create a project override only when the user requests project-specific behavior. Never place credentials in either file.
+## Editing peers
 
-## Define the engagement
+If the user explicitly asks a peer to implement something, use the provider's
+normal editing experience. Choose the current checkout for collaborative work or a
+native worktree when isolation is useful — explain the choice when it affects
+uncommitted changes or later integration. A worktree starts from committed state
+and may omit relevant dirty changes; surface that trade-off. Do not merge,
+discard, or clean another peer's work without a separate request.
 
-Before launching, create one compact peer brief per peer with these fields:
+## Workflow rules
 
-```markdown
-# Peer brief
-Role: <the contribution this peer owns>
-Objective: <the question or bounded task>
-Context: <repository root and exact relevant paths/artifacts>
-Deliverable: <what the peer must return or create>
-Constraints: <scope, compatibility, cost, time, and prohibited actions>
-Access: read-only | isolated-worktree
-Independence: Work independently; do not seek or infer other peers' answers.
-Success evidence: <how the coordinator can judge the result>
-
-You are a leaf peer in an externally coordinated run. Do not invoke peer-agents,
-spawn another AI, or delegate the task. Inspect the real project when useful.
-If blocked, return `BLOCKED:` with the exact missing input or failed dependency.
-Be decisive, identify uncertainty honestly, and report evidence and changed paths.
-```
-
-Adapt the wording to the role. Do not force every peer to solve the whole task when complementary roles would create more value.
-
-## Select peers
-
-Honor explicit provider, model, count, and role choices. Otherwise:
-
-1. Identify the coordinator's underlying model family when possible.
-2. Filter to enabled, installed, authenticated providers.
-3. Use the tool reference to map the role and authority to the provider's real mode; never assume headless means read-only.
-4. Prefer one peer from a different model family.
-5. Use saved task-fit preferences when available; otherwise use the provider's configured default. For controlled comparisons, pin exact models and effort parameters instead of accepting `auto` or fallback.
-6. Record requested and actual model identities. If no genuinely different family is available, disclose that and ask whether to use the best available same-family peer.
-
-For multiple peers, run independent work in parallel when their write scopes cannot collide. Never expose one peer's result to another until all independent runs finish. A later critique or handoff is a new, explicit stage.
-
-## Isolate authority
-
-For read-only work, point the peer at the current repository and enforce the provider's read-only or planning mode.
-
-For editing work:
-
-1. Inspect repository status and determine the base revision.
-2. Create one named worktree and branch per peer outside the main working tree.
-3. If relevant changes are uncommitted, stop and ask whether to delegate from the clean base or create an explicit snapshot. Do not silently omit, stash, commit, or copy dirty state.
-4. Restrict the peer to its worktree and stated task.
-5. Preserve the worktree after completion and report its path, branch, changes, and verification. Integration belongs to a later user-approved action.
-
-## Run and supervise
-
-Create a unique run directory under `${TMPDIR:-/tmp}/peer-agents-<run-id>/`. Keep orchestration files outside the repository. Write:
-
-- `brief.md` for the batch objective, shared context boundary, and common constraints;
-- `brief-<peer>.md` for each peer;
-- `<peer>.md` for the final response;
-- `<peer>.raw.json` or `<peer>.raw.jsonl` when the CLI exposes structured events;
-- `manifest.json` for provenance and lifecycle state.
-
-The manifest records `run_id`, `objective`, `cmux_workspace`, and one entry per peer with `provider`, effective `model`, `requested_model`, `actual_model`, `model_family`, `role`, `access`, `session_id`, `worktree`, `status`, `result_path`, and `exit_code`. Use statuses `pending`, `running`, `complete`, `blocked`, `failed`, or `cancelled`.
-
-Prefer a visible cmux batch workspace with one terminal per peer. Launch non-interactive CLI runs inside those terminals and capture their final messages to result files. Wait on process exit or explicit completion signals; terminal screen text is diagnostic evidence, not the completion protocol.
-
-During long runs, provide concise progress updates. If a peer blocks, preserve its exact question and session identifier, ask the user only when the answer is material, then resume that peer when supported. A timeout, failed provider, or cancelled peer remains an attributed partial failure.
-
-Do not close an ongoing collaborator workspace. For a one-shot consultation, offer cleanup after the results have been captured. When continuity is ambiguous, leave the workspace open.
-
-## Synthesize in the main session
-
-Read every successful result from its exact artifact path. Check important claims against the repository or available evidence rather than trusting confident prose.
-
-Return:
-
-1. **Conclusion** — the coordinator's best answer or recommended action.
-2. **Attributed peer findings** — provider, model, role, and the distinct contribution from each peer.
-3. **Consensus and divergence** — agreements, meaningful conflicts, and what was discarded with reasons.
-4. **Next action** — what the coordinator recommends doing now.
-5. **Run details** — failed or blocked peers, raw result paths, open cmux workspace, and any worktree/branch paths.
-
-Keep the synthesis proportional to the task. Do not paste full raw responses unless the user asks; preserve them in the run directory and make their location clear.
-
-## Workflow integration
-
-When asked to make peer consultation easier or automatic, use the opt-in snippets in the tools reference. Distinguish:
-
-- explicit phrase aliases that merely make invocation memorable;
-- checkpoints that ask whether to consult a peer;
-- automatic launch rules, which require especially clear provider, cost, context, and authority limits.
-
-Inspect the target rule file, avoid duplicate or conflicting guidance, show a syntactically valid exact diff with correct hunk counts, and obtain approval before writing. Validate the proposed patch without applying it. Child peer briefs must retain the leaf-peer recursion guard even when workflow rules are installed.
-Any installed checkpoint or automatic-launch rule must also say that spawned peers cannot invoke `peer-agents`, spawn another AI, or delegate further.
+Install automatic peer checkpoints only when requested. Inspect the target rule
+file, show the exact proposed diff, and get approval before changing it. Keep the
+rule explicit about when peers launch, which context may be shared, and that peer
+sessions must not recursively invoke more peers. If the user wants a memorable
+trigger, propose a small snippet — see the optional host rule in
+[references/tools.md](references/tools.md).

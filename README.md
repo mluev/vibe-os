@@ -67,9 +67,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the architectural boundaries and term
 
 ### `peer-agents` — experimental
 
-[`peer-agents`](skills/peer-agents/SKILL.md) brings independent AI peers from fresh Claude Code, Codex, or Cursor sessions into the current workflow. It can gather outside opinions, compare approaches, review work, or delegate bounded tasks while keeping model identity, access, artifacts, failures, and disagreements visible.
+[`peer-agents`](skills/peer-agents/SKILL.md) brings independent AI peers from fresh Claude Code, Codex, or Cursor sessions into the current workflow for outside opinions, plan comparisons, reviews, and collaborative help.
 
-The first version is an instruction-centered skill for macOS environments using cmux. It defaults to one complementary read-only peer, uses isolated worktrees for explicitly delegated editing, and returns an attributed synthesis to the coordinating session. See the skill itself for setup, data, cost, and side-effect boundaries.
+The experimental skill opens the real interactive AI sessions in visible cmux tabs. The coordinating AI briefs them, reads their conversations directly, asks follow-up questions in the same tabs, and synthesizes the result in the main chat. See the skill for provider, model, plan-mode, and worktree guidance.
 
 ## Session intelligence
 
