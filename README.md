@@ -63,6 +63,14 @@ vibe-os is format-neutral and modular:
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the architectural boundaries and terminology.
 
+## Available tools
+
+### `peer-agents` — experimental
+
+[`peer-agents`](skills/peer-agents/SKILL.md) brings independent AI peers from fresh Claude Code, Codex, or Cursor sessions into the current workflow. It can gather outside opinions, compare approaches, review work, or delegate bounded tasks while keeping model identity, access, artifacts, failures, and disagreements visible.
+
+The first version is an instruction-centered skill for macOS environments using cmux. It defaults to one complementary read-only peer, uses isolated worktrees for explicitly delegated editing, and returns an attributed synthesis to the coordinating session. See the skill itself for setup, data, cost, and side-effect boundaries.
+
 ## Session intelligence
 
 The original foundation of vibe-os—analyzing local AI coding sessions and turning evidence into useful recommendations—remains an important capability family. Its source adapters, unified session model, privacy rules, recommendation contract, and proposed reference tools now live in [docs/session-intelligence.md](docs/session-intelligence.md).
@@ -71,7 +79,7 @@ Those contracts apply to session-intelligence tools. They are not requirements f
 
 ## Project status
 
-vibe-os is currently in its foundation stage. The repository defines the mission, architecture, contribution standard, and the preserved design for session intelligence. It does not yet publish a stable installable toolkit.
+vibe-os is currently in its foundation stage. The repository defines the mission, architecture, contribution standard, and the preserved design for session intelligence, and now contains the experimental `peer-agents` skill. It does not yet publish a stable toolkit release.
 
 The next implementation priority will be selected through evidence and explicit evaluation rather than being implied by the foundation documents.
 
