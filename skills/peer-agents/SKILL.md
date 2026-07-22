@@ -85,9 +85,11 @@ user's prompt and goal decide the shape.
 - **Select context, don't dump it.** Send the request, the relevant paths and
   facts, the constraints, and what a good answer looks like — not the whole
   transcript, a premature conclusion, or private material.
-- **Authority follows intent.** Advice is read-only. Editing requires an explicit
-  delegation; never merge, discard, clean, or commit another peer's work without
-  a separate request.
+- **Authority follows intent.** Advisory peers launch read-only with approvals
+  disabled — safe and non-blocking, since a read-only peer cannot modify the repo.
+  Escalate to write access or auto-approved edits only for an explicit editing
+  delegation; never merge, discard, clean, or commit another peer's work without a
+  separate request.
 - **Synthesis preserves provenance.** Attribute each contribution, keep valuable
   disagreement, and explain what you rejected. Do not vote, average, or
   concatenate blindly. The coordinator checks claims and owns the final call.
@@ -97,17 +99,24 @@ user's prompt and goal decide the shape.
 1. **Understand the work.** Inspect the relevant repository, sibling project,
    diff, plan, or artifact before briefing peers. Give concrete paths and facts.
 2. **Choose peers.** Honor explicit provider, model, count, role, and mode
-   requests. Otherwise pick one complementary peer with a clear role.
-3. **Open visible sessions.** Use cmux to create one named workspace for the
-   consultation and one terminal tab or pane per peer. Launch the real interactive
-   Claude, Codex, or Cursor UI in the project directory. Do not hide a provider
-   behind a worker process or redirect its chat to files — the user should be able
-   to watch and take over every peer.
-4. **Brief each peer in chat.** After the UI is ready, send one concise prompt
-   with its role and objective, the relevant paths, the requested deliverable, the
-   constraints (including plan/read-only intent), a request to inspect the real
-   project and surface uncertainty, and a note to work independently without
-   spawning more agents. Tell each peer the distinct contribution it owns.
+   requests. Otherwise pick one complementary peer with a clear role. On the first
+   run the skill does a quick environment check — which CLIs and cmux are installed
+   and a default peer of a different model family — and caches it, so later runs are
+   fast; see [references/tools.md](references/tools.md).
+3. **Open visible sessions — fast and non-blocking.** Use cmux to create one
+   workspace for the consultation with a terminal tab or pane per peer. Launch each
+   advisory peer in a *single* command that starts its real interactive UI
+   **read-only with approval prompts disabled** and passes the brief as the CLI's
+   positional prompt, so it submits at startup — no separate send, no waiting for a
+   "ready" screen, no stalling on permission or trust prompts. Keep inspection
+   commands off the happy path. Do not hide a provider behind a worker process or
+   redirect its chat to files — the user should be able to watch and take over
+   every peer. See [references/tools.md](references/tools.md) for the exact flags.
+4. **Brief each peer.** The brief carries its role and objective, the relevant
+   paths, the requested deliverable, the constraints (including plan/read-only
+   intent), a request to inspect the real project and surface uncertainty, and a
+   note to work independently without spawning more agents. Tell each peer the
+   distinct contribution it owns.
 5. **Collaborate through the tab.** Read the screen to follow progress and extract
    the answer. When it is incomplete, ambiguous, or worth challenging, send a
    follow-up into the same tab. Use judgment, not a rigid completion protocol.
@@ -118,9 +127,11 @@ user's prompt and goal decide the shape.
    disagreement, the recommended next action, and any failure plus which tabs
    remain open. Leave sessions open for follow-up; close them only when asked.
 
-If cmux is inaccessible, explain that the sessions cannot be opened visibly from
-the current process and ask whether to retry from inside cmux or continue without
-it.
+cmux gives the best experience — visible tabs the user can watch, continue, and
+take over. If it is inaccessible, say so, recommend running from inside cmux, and
+offer the no-cmux fallback: run each peer non-interactively (print/exec mode) and
+read its output directly, accepting the loss of a live chat. See the "Without
+cmux" section in [references/tools.md](references/tools.md).
 
 ## Editing peers
 
