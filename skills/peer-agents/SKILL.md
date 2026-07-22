@@ -96,8 +96,7 @@ user's prompt and goal decide the shape.
 
 ## Workflow
 
-1. **Understand the work.** Inspect the relevant repository, sibling project,
-   diff, plan, or artifact before briefing peers. Give concrete paths and facts.
+1. **Understand the work.** Inspect the relevant repository, sibling project, plan, or artifact before briefing peers. Give concrete paths and facts.
 2. **Choose peers.** Honor explicit provider, model, count, role, and mode
    requests. Otherwise pick one complementary peer with a clear role. On the first
    run the skill does a quick environment check — which CLIs and cmux are installed
